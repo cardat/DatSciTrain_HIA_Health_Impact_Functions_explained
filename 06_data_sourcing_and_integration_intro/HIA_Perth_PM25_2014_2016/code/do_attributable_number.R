@@ -35,18 +35,15 @@ dths_attrV3 <- dths_attrV2[,.(pop_tot_sa3 = sum(pop_tot, na.rm = T),
 head(dths_attrV3, 20)
 ## sa3 20901 is Banyule with estimate 15.5 (Broome's estimate was 14)
 
-setwd(indir_sa3)
-dir()
-sa3 <- readOGR(path.expand(indir_sa3), infile_sa3)
-setwd(projdir)
-head(sa3@data)
+sa3 <- st_read(file.path(indir_sa3, infile_sa3))
+head(sa3)
 dths_attrV4 <- left_join(data.frame(dths_attrV3), 
-                         sa3@data, 
+                         sa3, 
                          by = c("SA3" = "SA3_CODE16")
                          )
 head(dths_attrV4)
+dths_attrV4$geometry <- NULL
 nrow(dths_attrV3)
-68
 dths_attrV4[is.na(dths_attrV4$GCC_CODE16),]
 
 # SA3 pop_tot_sa3 expected_tot_sa3 an_sa3 SA3_NAME16 SA4_CODE16 SA4_NAME16
@@ -58,8 +55,8 @@ dths_attrV4[is.na(dths_attrV4$GCC_CODE16),]
 
 ##getwd()
 
-# this is still owncloud
-##dir()
-# prior to join SA3 name and GCC etc
-##write.csv(dths_attrV3, file.path("figures_and_tables", "deaths_attributable_2016_vic_20180407.csv"), row.names = F)
-write.csv(dths_attrV4, file.path("figures_and_tables", sprintf("deaths_attributable_%s_%s_%s.csv", state, timepoint, make.names(Sys.time()))), row.names = F)
+write.csv(dths_attrV4, 
+          file.path("figures_and_tables", sprintf("deaths_attributable_%s_%s.csv", state, timepoint))
+          , row.names = F)
+
+#

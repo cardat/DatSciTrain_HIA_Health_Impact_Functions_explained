@@ -1,8 +1,10 @@
 
 'name:code/func.R'
 #### functions ####
-library(rgeos)
-library(rgdal)
+library(sf)
+# vale our deprecated friends
+# library(rgdal)
+# library(rgeos)
 library(raster)
 library(foreign)
 library(sqldf)

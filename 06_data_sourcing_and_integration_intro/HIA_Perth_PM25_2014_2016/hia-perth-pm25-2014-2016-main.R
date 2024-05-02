@@ -16,14 +16,14 @@
 ## 02110-1301, USA
 ################################################################################
 
-projdir <- "C:/Users/287658C/OneDrive - Curtin/Shared/HIA_projects_PRIVATE/Epidemiology/DatSciTrain_HIA_Health_Impact_Functions_explained/06_data_sourcing_and_integration_intro/HIA_Perth_PM25_2014_2016"
- # e.g. /home/ivan.hanigan_sydney/projects/HIA_Health_Impact_Assessments/HIA_Perth_PM25_2014_2016"
+projdir <- "~/DatSciTrain_HIA_Health_Impact_Functions_explained/06_data_sourcing_and_integration_intro/HIA_Perth_PM25_2014_2016"
+ # e.g. use getwd() and pwd etc to find your path, then copy and past it here"
 setwd(projdir)
 # install the required packages
 install_pkg_flag <- FALSE
 if(install_pkg_flag){
-install.packages("rgdal")
-install.packages("rgeos")
+#install.packages("rgdal") # deprecated package
+#install.packages("rgeos") # deprecated package
 install.packages("raster")
 install.packages("foreign")
 install.packages("sqldf")

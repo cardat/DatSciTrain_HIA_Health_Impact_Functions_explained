@@ -1,7 +1,7 @@
 
 'name:code/load_pops_mb'
 
-shp <- readOGR(path.expand(indir_mb), infile_mb)
+shp <- st_read(file.path(indir_mb, infile_mb))
 # 
 if(specific_stdy_reg){
   todo <- foreign::read.dbf(stdy_reg)
@@ -21,7 +21,7 @@ level0_pops <- read.csv(file.path(indir_mb_pops, infile_mb_pops), as.is = T)
 head(level0_pops)
 level0_pops$MB_CODE16 <- level0_pops$MB_CODE_2016
 
-head(shp2@data,2)
+head(shp2,2)
 
-shp2@data <- left_join(shp2@data, level0_pops[,mb_pops_varlist])
-head(shp2@data)
+shp2 <- left_join(shp2, level0_pops[,mb_pops_varlist])
+head(shp2)
