@@ -12,17 +12,21 @@ flist2 <- flist2[grep(".tif$", flist2)]
 flist3 <- c(flist, flist2)
 flist3
 
-shp2 <- shp2[shp2$MB_CAT16 != "NOUSUALRESIDENCE",]
+## NOTE shp2 is loaded in script: load_pops_mb.R
+## there are some missing coordinate data
+shp2 <- shp2[!st_is_empty(shp2),]
 
-qc <- cbind(shp2, st_coordinates(pts0))
-head(qc)
-summary(qc)
-shp2 <- qc[!is.na(qc$X),]
-
+## we will use a simple method to extract the exposure data at centre of polygon
+## rather than more time-consuming area-averages
 pts0 <- st_centroid(shp2, byid = T)
-summary(st_coordinates(pts0))
+pts0_xy <- st_coordinates(pts0)
+summary(pts0_xy)
 
-pts <- SpatialPointsDataFrame(st_coordinates(pts0), st_drop_geometry(shp2)) #, proj4string = crs(shp2))
+shp2_joined <- cbind(shp2, pts0_xy)
+head(shp2_joined)
+summary(shp2_joined)
+
+pts <- SpatialPointsDataFrame(pts0_xy, st_drop_geometry(shp2_joined))
 #plot(pts, col = "red")
 
 for(fi in timepoint){

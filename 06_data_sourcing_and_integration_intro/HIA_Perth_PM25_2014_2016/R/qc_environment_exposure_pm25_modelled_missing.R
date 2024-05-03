@@ -10,4 +10,4 @@ qc <- pts2[is.na(pts2$e),]
 head(qc)
 qc <- qc[qc$Person != 0,]
 
-st_write(qc, file.path(outdir, sprintf("mb_cent_missing_expo_%s_%s", state, fi)), driver = "ESRI Shapefile", overwrite_layer = T)
+st_write(qc, file.path(outdir, sprintf("mb_cent_missing_expo_%s_%s", state, fi)), driver = "ESRI Shapefile", append=FALSE)
