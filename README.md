@@ -6,3 +6,7 @@ This material is provided to the learning and communikty of practice supported b
 MIT License
 Copyright (c) 2023 CARDAT / ivanhanigan
 ```
+
+## TODO list
+
+- section 06 has been superceded by https://github.com/cardat/DatSciTrain_HIA_air_health_PM25_2014_2016 so just link to that?
