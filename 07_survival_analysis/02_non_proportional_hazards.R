@@ -18,174 +18,174 @@ library(survival)
 library(survival)
 
 
-###################################################
-### code chunk number 2: testdata
-###################################################
-tdata <- data.frame(subject=c(5,5,5), time1=c(0,90, 120),
-                    time2 = c(90, 120, 185), death=c(0,0,1),
-                    creatinine=c(0.9, 1.5, 1.2))
-tdata
-
-
-###################################################
-### code chunk number 3: fake
-###################################################
-set.seed(1953)  # a good year
-nvisit <- floor(pmin(lung$time/30.5, 12))
-response <- rbinom(nrow(lung), nvisit, .05) > 0
-badfit <- survfit(Surv(time/365.25, status) ~ response, data=lung)
-plot(badfit, mark.time=FALSE, lty=1:2, 
-     xlab="Years post diagnosis", ylab="Survival")
-legend(1.5, .85, c("Responders", "Non-responders"), 
-       lty=2:1, bty='n')
-
-
-###################################################
-### code chunk number 4: timedep.Rnw:201-203 (eval = FALSE)
-###################################################
-## fit <- coxph(Surv(time1, time2, status) ~ age + creatinine, 
-##              data=mydata)
-
-
-###################################################
-### code chunk number 5: timedep.Rnw:274-275 (eval = FALSE)
-###################################################
-## newdata <- tmerge(data1, data2, id, newvar=tdc(time, value), ...)
-
-
-###################################################
-### code chunk number 6: timedep.Rnw:320-321
-###################################################
-cgd0[1:4,]
-
-
-###################################################
-### code chunk number 7: cgd1
-###################################################
-dim(cgd0)
-newcgd <- tmerge(data1=cgd0[, 1:13], data2=cgd0, id=id, tstop=futime)
-newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime1)) 
-newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime2)) 
-newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime3)) 
-newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime4)) 
-newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime5)) 
-newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime6)) 
-newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime7)) 
-newcgd <- tmerge(newcgd, newcgd, id, enum=cumtdc(tstart))
-dim(newcgd)
-newcgd[1:5,c(1, 4:6, 13:17)]
-summary(newcgd)
-coxph(Surv(tstart, tstop, infect) ~ treat + inherit + steroids,
-      data =newcgd, cluster = id)
-
-
-###################################################
-### code chunk number 8: cgd1b
-###################################################
-test  <- tmerge(cgd0[, 1:13], cgd0, id=id, tstop=futime,
-                infect = event(etime1), infect= event(etime2),
-                infect = event(etime3), infect= event(etime4),
-                infect = event(etime5), infect= event(etime6),
-                infect = event(etime7))
-test <- tmerge(test, test,  id= id, enum = cumtdc(tstart))
-all.equal(newcgd, test)
-
-
-###################################################
-### code chunk number 9: cgd1c
-###################################################
-# create a long data set with the recurrences
-temp <- reshape(cgd0[c(1, 14:20)], varying= 2:8, v.names="etime",
-                idvar="id", direction="long")
-cgdrecur <- subset(temp, !is.na(etime))  # toss missings (not essential)
-
-newcgd <- tmerge(data1=cgd0[, 1:13], data2=cgd0, id=id, tstop=futime)
-newcgd <- tmerge(newcgd, cgdrecur, id=id, infect= event(etime))
-
-
-###################################################
-### code chunk number 10: stanford
-###################################################
-jasa$subject <- 1:nrow(jasa)  #we need an identifier variable
-tdata <- with(jasa, data.frame(subject = subject,
-                               futime= pmax(.5, fu.date - accept.dt),
-                               txtime= ifelse(tx.date== fu.date,
-                                              (tx.date -accept.dt) -.5,
-                                              (tx.date - accept.dt)),
-                               fustat = fustat
-))
-xdata <- tmerge(jasa, tdata, id=subject,
-                death = event(futime, fustat),
-                transplant   =  tdc(txtime), 
-                options= list(idname="subject"))
-
-sdata <- tmerge(jasa, tdata, id=subject,
-                death = event(futime, fustat),
-                trt   =  tdc(txtime), 
-                options= list(idname="subject"))
-attr(sdata, "tcount")
-sdata$age <- sdata$age -48
-sdata$year <- as.numeric(sdata$accept.dt - as.Date("1967-10-01"))/365.25
-
-# model 6 of the table in K&P
-coxph(Surv(tstart, tstop, death) ~ age*trt + surgery + year, 
-      data= sdata, ties="breslow")
-
-
-###################################################
-### code chunk number 11: pbc
-###################################################
-temp <- subset(pbc, id <= 312, select=c(id:sex, stage)) # baseline
-pbc2 <- tmerge(temp, temp, id=id, death = event(time, status)) #set range
-pbc2 <- tmerge(pbc2, pbcseq, id=id, ascites = tdc(day, ascites),
-               bili = tdc(day, bili), albumin = tdc(day, albumin),
-               protime = tdc(day, protime), alk.phos = tdc(day, alk.phos))
-fit1 <- coxph(Surv(time, status==2) ~ log(bili) + log(protime), pbc)
-fit2 <- coxph(Surv(tstart, tstop, death==2) ~ log(bili) + log(protime), pbc2)
-rbind('baseline fit' = coef(fit1),
-      'time dependent' = coef(fit2))
-
-
-###################################################
-### code chunk number 12: timedep.Rnw:619-620
-###################################################
-attr(pbc2, "tcount")
-
-
-###################################################
-### code chunk number 13: timedep.Rnw:622-624
-###################################################
-#grab a couple of numbers for the paragraph below
-atemp <- attr(pbc2, "tcount")[2:3,]
-
-
-###################################################
-### code chunk number 14: timedep.Rnw:705-711 (eval = FALSE)
-###################################################
-## temp <- subset(pbc, id <= 312, select=c(id:sex, stage))
-## pbc2 <- tmerge(temp, temp, id=id, death = event(time, status))
-## pbc2a <- tmerge(pbc2, pbcseq, id=id, ascites = tdc(day, ascites),
-##                bili = tdc(day, bili), options= list(delay=14))
-## pbc2b <- tmerge(pbc2, pbcseq, id=id, ascites = tdc(day+14, ascites),
-##                bili = tdc(day+14, bili))
-
-
-###################################################
-### code chunk number 15: rep (eval = FALSE)
-###################################################
-## newd <- tmerge(data1=base, data2=timeline, id=repid, tstart=age1, 
-##                tstop=age2, options(id="repid"))
-## newd <- tmerge(newd, outcome, id=repid, mcount = cumtdc(age))
-## newd <- tmerge(newd, subset(outcome, event='diabetes'), 
-##                diabetes= tdc(age))
-## newd <- tmerge(newd, subset(outcome, event='arthritis'), 
-##                arthritis= tdc(age))
+# ###################################################
+# ### code chunk number 2: testdata
+# ###################################################
+# tdata <- data.frame(subject=c(5,5,5), time1=c(0,90, 120),
+#                     time2 = c(90, 120, 185), death=c(0,0,1),
+#                     creatinine=c(0.9, 1.5, 1.2))
+# tdata
+# 
+# 
+# ###################################################
+# ### code chunk number 3: fake
+# ###################################################
+# set.seed(1953)  # a good year
+# nvisit <- floor(pmin(lung$time/30.5, 12))
+# response <- rbinom(nrow(lung), nvisit, .05) > 0
+# badfit <- survfit(Surv(time/365.25, status) ~ response, data=lung)
+# plot(badfit, mark.time=FALSE, lty=1:2, 
+#      xlab="Years post diagnosis", ylab="Survival")
+# legend(1.5, .85, c("Responders", "Non-responders"), 
+#        lty=2:1, bty='n')
+# 
+# 
+# ###################################################
+# ### code chunk number 4: timedep.Rnw:201-203 (eval = FALSE)
+# ###################################################
+# ## fit <- coxph(Surv(time1, time2, status) ~ age + creatinine, 
+# ##              data=mydata)
+# 
+# 
+# ###################################################
+# ### code chunk number 5: timedep.Rnw:274-275 (eval = FALSE)
+# ###################################################
+# ## newdata <- tmerge(data1, data2, id, newvar=tdc(time, value), ...)
+# 
+# 
+# ###################################################
+# ### code chunk number 6: timedep.Rnw:320-321
+# ###################################################
+# cgd0[1:4,]
+# 
+# 
+# ###################################################
+# ### code chunk number 7: cgd1
+# ###################################################
+# dim(cgd0)
+# newcgd <- tmerge(data1=cgd0[, 1:13], data2=cgd0, id=id, tstop=futime)
+# newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime1)) 
+# newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime2)) 
+# newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime3)) 
+# newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime4)) 
+# newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime5)) 
+# newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime6)) 
+# newcgd <- tmerge(newcgd, cgd0, id=id, infect = event(etime7)) 
+# newcgd <- tmerge(newcgd, newcgd, id, enum=cumtdc(tstart))
+# dim(newcgd)
+# newcgd[1:5,c(1, 4:6, 13:17)]
+# summary(newcgd)
+# coxph(Surv(tstart, tstop, infect) ~ treat + inherit + steroids,
+#       data =newcgd, cluster = id)
+# 
+# 
+# ###################################################
+# ### code chunk number 8: cgd1b
+# ###################################################
+# test  <- tmerge(cgd0[, 1:13], cgd0, id=id, tstop=futime,
+#                 infect = event(etime1), infect= event(etime2),
+#                 infect = event(etime3), infect= event(etime4),
+#                 infect = event(etime5), infect= event(etime6),
+#                 infect = event(etime7))
+# test <- tmerge(test, test,  id= id, enum = cumtdc(tstart))
+# all.equal(newcgd, test)
+# 
+# 
+# ###################################################
+# ### code chunk number 9: cgd1c
+# ###################################################
+# # create a long data set with the recurrences
+# temp <- reshape(cgd0[c(1, 14:20)], varying= 2:8, v.names="etime",
+#                 idvar="id", direction="long")
+# cgdrecur <- subset(temp, !is.na(etime))  # toss missings (not essential)
+# 
+# newcgd <- tmerge(data1=cgd0[, 1:13], data2=cgd0, id=id, tstop=futime)
+# newcgd <- tmerge(newcgd, cgdrecur, id=id, infect= event(etime))
+# 
+# 
+# ###################################################
+# ### code chunk number 10: stanford
+# ###################################################
+# jasa$subject <- 1:nrow(jasa)  #we need an identifier variable
+# tdata <- with(jasa, data.frame(subject = subject,
+#                                futime= pmax(.5, fu.date - accept.dt),
+#                                txtime= ifelse(tx.date== fu.date,
+#                                               (tx.date -accept.dt) -.5,
+#                                               (tx.date - accept.dt)),
+#                                fustat = fustat
+# ))
+# xdata <- tmerge(jasa, tdata, id=subject,
+#                 death = event(futime, fustat),
+#                 transplant   =  tdc(txtime), 
+#                 options= list(idname="subject"))
+# 
+# sdata <- tmerge(jasa, tdata, id=subject,
+#                 death = event(futime, fustat),
+#                 trt   =  tdc(txtime), 
+#                 options= list(idname="subject"))
+# attr(sdata, "tcount")
+# sdata$age <- sdata$age -48
+# sdata$year <- as.numeric(sdata$accept.dt - as.Date("1967-10-01"))/365.25
+# 
+# # model 6 of the table in K&P
+# coxph(Surv(tstart, tstop, death) ~ age*trt + surgery + year, 
+#       data= sdata, ties="breslow")
+# 
+# 
+# ###################################################
+# ### code chunk number 11: pbc
+# ###################################################
+# temp <- subset(pbc, id <= 312, select=c(id:sex, stage)) # baseline
+# pbc2 <- tmerge(temp, temp, id=id, death = event(time, status)) #set range
+# pbc2 <- tmerge(pbc2, pbcseq, id=id, ascites = tdc(day, ascites),
+#                bili = tdc(day, bili), albumin = tdc(day, albumin),
+#                protime = tdc(day, protime), alk.phos = tdc(day, alk.phos))
+# fit1 <- coxph(Surv(time, status==2) ~ log(bili) + log(protime), pbc)
+# fit2 <- coxph(Surv(tstart, tstop, death==2) ~ log(bili) + log(protime), pbc2)
+# rbind('baseline fit' = coef(fit1),
+#       'time dependent' = coef(fit2))
+# 
+# 
+# ###################################################
+# ### code chunk number 12: timedep.Rnw:619-620
+# ###################################################
+# attr(pbc2, "tcount")
+# 
+# 
+# ###################################################
+# ### code chunk number 13: timedep.Rnw:622-624
+# ###################################################
+# #grab a couple of numbers for the paragraph below
+# atemp <- attr(pbc2, "tcount")[2:3,]
+# 
+# 
+# ###################################################
+# ### code chunk number 14: timedep.Rnw:705-711 (eval = FALSE)
+# ###################################################
+# ## temp <- subset(pbc, id <= 312, select=c(id:sex, stage))
+# ## pbc2 <- tmerge(temp, temp, id=id, death = event(time, status))
+# ## pbc2a <- tmerge(pbc2, pbcseq, id=id, ascites = tdc(day, ascites),
+# ##                bili = tdc(day, bili), options= list(delay=14))
+# ## pbc2b <- tmerge(pbc2, pbcseq, id=id, ascites = tdc(day+14, ascites),
+# ##                bili = tdc(day+14, bili))
+# 
+# 
+# ###################################################
+# ### code chunk number 15: rep (eval = FALSE)
+# ###################################################
+# ## newd <- tmerge(data1=base, data2=timeline, id=repid, tstart=age1, 
+# ##                tstop=age2, options(id="repid"))
+# ## newd <- tmerge(newd, outcome, id=repid, mcount = cumtdc(age))
+# ## newd <- tmerge(newd, subset(outcome, event='diabetes'), 
+# ##                diabetes= tdc(age))
+# ## newd <- tmerge(newd, subset(outcome, event='arthritis'), 
+# ##                arthritis= tdc(age))
 
 
 ###################################################
 ### code chunk number 16: veteran1
 ###################################################
-options(show.signif.stars = FALSE)  # display statistical intelligence
+#options(show.signif.stars = FALSE)  # display statistical intelligence
 vfit <- coxph(Surv(time, status) ~ trt + prior + karno, veteran)
 vfit
 quantile(veteran$karno)
@@ -219,8 +219,14 @@ vfit2
 cox.zph(vfit2)
 
 #### Address the non-proportional hazards with a step function ####
-# ADD THE NEW COEFFS to the plot and show on untransformed time axis (note above transform, it is all about interpeting the amount of curve)
-# orig curve
+# ADD THE NEW COEFFS to the plot 
+vfit2$coef[3]
+abline(h= vfit2$coef[3], lwd=2, lty=1, col = 'green')
+abline(h= vfit2$coef[4], lwd=2, lty=1, col = 'blue')
+abline(h= vfit2$coef[5], lwd=2, lty=1, col = 'red')
+
+# and show on untransformed time axis (note above transform, it is all about interpeting the amount of curve)
+# NB I tried to add these to the transformed curve but ran into an error trying to show them as segments (the x-axis is not as expected?)
 zp_ut <- cox.zph(vfit, transform= 'identity')
 plot(zp_ut[3], resid=FALSE)    # a plot for the 3rd variable in the fit
 # that illusrates why the transform is good to do
@@ -229,25 +235,63 @@ segments(0, vfit2$coef[3], 90, vfit2$coef[3], lwd=2, lty=1, col = 'green')
 segments(90, vfit2$coef[4], 180, vfit2$coef[4], lwd=2, lty=1, col = 'green')
 segments(180, vfit2$coef[5], 1000, vfit2$coef[5], lwd=2, lty=1, col = 'green')
 
-# if the exposure of interest may be non-linear, let's use quintiles
+vfit
+par(mfrow=c(2,1))
+termplot(vfit, terms = 3, se = T)
+summa2 <- data.frame(summary(vfit2)$coefficients)
+summa2
+#termplot(vfit2, terms = 3, se = T)
+# wpm't work
+x <- min(veteran$karno):max(veteran$karno)
+y <- x * vfit2$coef[3]
+plot(x,y, ylim = c(-4,2))
+y2 <- x * vfit2$coef[4]
+points(x,y2, col = 'green')
+y3 <- x * vfit2$coef[5]
+points(x,y3, col = 'blue')
+
+# # if the exposure of interest may be non-linear, let's use quintiles
+# vet2$pm25_q <- as.factor(
+#   cut(vet2$karno, 
+#       breaks = quantile(vet2$karno, probs=seq(0,1,by=0.2), na.rm = T), 
+#       include.lowest = T, labels=F)
+# )
+# plot(vet2$pm25_q, vet2$karno)
 vet2$pm25_q <- as.factor(
   cut(vet2$karno, 
-      breaks = quantile(vet2$karno, probs=seq(0,1,by=0.2), na.rm = T), 
+      breaks = quantile(vet2$karno, probs=seq(0,1,by=0.25), na.rm = T), 
       include.lowest = T, labels=F)
 )
+plot(vet2$pm25_q, vet2$karno)
 
 vet2[1:7, c("id", "tstart", "time", "status", "tgroup", "age", "karno", "pm25_q")]
 vfit2.1 <- coxph(Surv(time, status) ~ trt + prior + pm25_q, data=vet2)
 vfit2.1
+
+par(mfrow=c(2,1))
+termplot(vfit, terms = 3, se = T, ylim = c(-5,2))
+s <- data.frame(summary(vfit2.1)$coefficients)
+idx <- 3:5
+yl <- c(-5,2)
+plot(as.factor(c("contrast", row.names(s[idx,]))),c(0,s[idx,"coef"]), ylim = yl)
+points(as.factor(c("contrast", row.names(s[idx,]))),c(0,s[idx,"coef"] + (1.96*s[idx,"se.coef."])))
+points(as.factor(c("contrast", row.names(s[idx,]))),c(0,s[idx,"coef"] - (1.96*s[idx,"se.coef."])))
+dev.off()
+
+
 zp_ut2.1 <- cox.zph(vfit2.1, transform= 'identity')
+zp_ut2.1
 plot(zp_ut2.1[3], resid=FALSE)    # a plot for the 3rd variable in the fit
+# I am not sure how the beta for the qunitile ordered factor is being summarised here. it has changed from negative to positive
 
 vfit2.2 <- coxph(Surv(tstart, time, status) ~ trt + prior +
                  pm25_q:strata(tgroup), data=vet2)
 vfit2.2
 zp_ut2.2 <- cox.zph(vfit2.2)#, transform= 'identity')
 
-summa0 <- data.frame(summary(vfit2.1)$coefficients)
+
+
+summa2.1 <- data.frame(summary(vfit2.1)$coefficients)
 summa2.2 <- data.frame(summary(vfit2.2)$coefficients)
 my_coef_plot <- function(
     s = summa0
@@ -264,7 +308,7 @@ my_coef_plot <- function(
   # title(fig_label)
   # Adjust margins to allow space for rotated labels
   # Adjust margins to allow space for rotated labels
-  par(mar = c(17, 4, 4, 2) + 0.1)
+  par(mar = c(7, 4, 4, 2) + 0.1)
   
   # Create the base plot without x-axis labels
   plot(as.factor(c("contrast", row.names(s[idx,]))), c(0, s[idx, "coef"]),
@@ -284,11 +328,18 @@ my_coef_plot <- function(
   
   
 }
-my_coef_plot(s = summa0, idx = 3:6, yl = c(-3.5,0.2), fig_label = "not adjusted for ph")
+
+# now do the new models
+my_coef_plot(s = summa2.1, idx = 3:5, yl = c(-5,2), fig_label = "not adjusted for ph")
 matrix(row.names(summa2.2))
-my_coef_plot(s = summa2.2, idx = 3:7, yl = c(range(summa2.2[3:7,"coef"], na.rm = T)), fig_label = "adjusted for ph group 1")
-my_coef_plot(s = summa2.2, idx = 8:12, yl = c(range(summa2.2[8:12,"coef"], na.rm = T)), fig_label = "adjusted for ph group 2")
-my_coef_plot(s = summa2.2, idx = 13:17, yl = c(range(summa2.2[13:17,"coef"], na.rm = T)), fig_label = "adjusted for ph group 3")
+par(mfrow = c(4,1))
+plot(x,y, ylim = c(-4,2))
+points(x,y2, col = 'green')
+points(x,y3, col = 'blue')
+
+my_coef_plot(s = summa2.2, idx = 3:6, yl = c(-5,2), fig_label = "adjusted for ph group 1")
+my_coef_plot(s = summa2.2, idx = 8:12, yl = c(-5,2), fig_label = "adjusted for ph group 2")
+my_coef_plot(s = summa2.2, idx = 13:17, yl = c(-5,2), fig_label = "adjusted for ph group 3")
 
 ##################################################
 ### code chunk number 20: split3
