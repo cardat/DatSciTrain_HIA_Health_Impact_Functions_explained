@@ -218,8 +218,79 @@ vfit2 <- coxph(Surv(tstart, time, status) ~ trt + prior +
 vfit2
 cox.zph(vfit2)
 
+#### Address the non-proportional hazards with a step function ####
+# ADD THE NEW COEFFS to the plot and show on untransformed time axis (note above transform, it is all about interpeting the amount of curve)
+# orig curve
+zp_ut <- cox.zph(vfit, transform= 'identity')
+plot(zp_ut[3], resid=FALSE)    # a plot for the 3rd variable in the fit
+# that illusrates why the transform is good to do
+abline(0,0, lty=1)
+segments(0, vfit2$coef[3], 90, vfit2$coef[3], lwd=2, lty=1, col = 'green')
+segments(90, vfit2$coef[4], 180, vfit2$coef[4], lwd=2, lty=1, col = 'green')
+segments(180, vfit2$coef[5], 1000, vfit2$coef[5], lwd=2, lty=1, col = 'green')
 
-###################################################
+# if the exposure of interest may be non-linear, let's use quintiles
+vet2$pm25_q <- as.factor(
+  cut(vet2$karno, 
+      breaks = quantile(vet2$karno, probs=seq(0,1,by=0.2), na.rm = T), 
+      include.lowest = T, labels=F)
+)
+
+vet2[1:7, c("id", "tstart", "time", "status", "tgroup", "age", "karno", "pm25_q")]
+vfit2.1 <- coxph(Surv(time, status) ~ trt + prior + pm25_q, data=vet2)
+vfit2.1
+zp_ut2.1 <- cox.zph(vfit2.1, transform= 'identity')
+plot(zp_ut2.1[3], resid=FALSE)    # a plot for the 3rd variable in the fit
+
+vfit2.2 <- coxph(Surv(tstart, time, status) ~ trt + prior +
+                 pm25_q:strata(tgroup), data=vet2)
+vfit2.2
+zp_ut2.2 <- cox.zph(vfit2.2)#, transform= 'identity')
+
+summa0 <- data.frame(summary(vfit2.1)$coefficients)
+summa2.2 <- data.frame(summary(vfit2.2)$coefficients)
+my_coef_plot <- function(
+    s = summa0
+    ,
+    idx = 3:6
+    ,
+    yl = c(-5.5,1.5)
+    ,
+    fig_label = "label"
+){
+  # plot(as.factor(c("contrast", row.names(s[idx,]))),c(0,s[idx,"coef"]), ylim = yl)
+  # points(as.factor(c("contrast", row.names(s[idx,]))),c(0,s[idx,"coef"] + (1.96*s[idx,"se.coef."])))
+  # points(as.factor(c("contrast", row.names(s[idx,]))),c(0,s[idx,"coef"] - (1.96*s[idx,"se.coef."])))
+  # title(fig_label)
+  # Adjust margins to allow space for rotated labels
+  # Adjust margins to allow space for rotated labels
+  par(mar = c(17, 4, 4, 2) + 0.1)
+  
+  # Create the base plot without x-axis labels
+  plot(as.factor(c("contrast", row.names(s[idx,]))), c(0, s[idx, "coef"]),
+       ylim = yl, xaxt = "n", xlab = '')
+  
+  # Add error bars (points)
+  points(as.factor(c("contrast", row.names(s[idx,]))), c(0, s[idx, "coef"] + (1.96 * s[idx, "se.coef."])))
+  points(as.factor(c("contrast", row.names(s[idx,]))), c(0, s[idx, "coef"] - (1.96 * s[idx, "se.coef."])))
+  
+  # Get the x-axis positions for the labels
+  x_pos <- 1:length(c("contrast", row.names(s[idx,])))
+  
+  # Manually add x-axis labels rotated at 45 degrees
+  text(x = x_pos, y = par("usr")[3] - .05, 
+       labels = c("contrast", row.names(s[idx,])), 
+       srt = 45, adj = 1, xpd = TRUE, cex = 0.8)
+  
+  
+}
+my_coef_plot(s = summa0, idx = 3:6, yl = c(-3.5,0.2), fig_label = "not adjusted for ph")
+matrix(row.names(summa2.2))
+my_coef_plot(s = summa2.2, idx = 3:7, yl = c(range(summa2.2[3:7,"coef"], na.rm = T)), fig_label = "adjusted for ph group 1")
+my_coef_plot(s = summa2.2, idx = 8:12, yl = c(range(summa2.2[8:12,"coef"], na.rm = T)), fig_label = "adjusted for ph group 2")
+my_coef_plot(s = summa2.2, idx = 13:17, yl = c(range(summa2.2[13:17,"coef"], na.rm = T)), fig_label = "adjusted for ph group 3")
+
+##################################################
 ### code chunk number 20: split3
 ###################################################
 vfit2$means
