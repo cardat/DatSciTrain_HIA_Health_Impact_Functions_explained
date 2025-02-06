@@ -1,0 +1,179 @@
+---
+title: "Non-proportional hazards and non-linear exposure-response functions"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: 
+      collapsed: false
+  word_document:
+    toc: true
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(targets)
+library(knitr)
+```
+
+
+# Introduction
+## Background
+In this case study, we employed a Cox proportional hazards model to investigate the relationship between an exposure and health outcomes. During the model diagnostics, we identified non-proportional hazards for the exposure of interest, indicating that the effect estimate on the hazard rate varied over time.
+
+To address this violation of the proportional hazards assumption, we introduced time-varying effects through step functions. This was implemented using an interaction term with time strata, allowing us to account for the changing impact of air pollution across different time groups.
+
+Our primary aim was to assess the non-linearity of the exposure-response relationship over the range of air pollution values. To achieve this, we modeled air pollution in quintiles and included an interaction term for the age strata. 
+
+## Methods and Data
+We use the veterans cancer data from the `timedep` vignette from the `survival` package by Terry Therneau. We also follow suggestions from Frank Harrell author of the Regression Modelling Strategies book and `rms` package.
+
+```{r}
+library(survival)
+library(rms)
+```
+
+
+### Statistical Analysis
+#### 1. Fitting the Cox Model
+```{r, veteran1}
+vfit <- coxph(Surv(time, status) ~ trt + prior + karno, veteran)
+summary(vfit)
+```
+
+#### 2. Checking the Proportional Hazards Assumption
+- the proportional hazard assumption is precisely that β(t) = β, i.e., the coeffcient does not change over time.
+
+```{r, veteran1b}
+zp <- cox.zph(vfit, transform = function(time) log(time + 20))
+zp
+plot(zp[3], resid = FALSE)
+abline(0, 0, lty = 3)
+abline(h = vfit$coef[3], lwd = 2, lty = 3)
+```
+
+- Solid line = the effect estimate for Karnofsy score, versus time, in the Veteran's cancer data set, as estimated by cox.zph, along with confidence intervals. Dotted lines are the overall estimate from a Cox model with karno as a time-fixed effect, and a reference line at 0.
+- Early on it has a large negative effect, but by 200 days this has waned and is not much different from zero.
+
+#### 3. Addressing Non-Proportional Hazards
+- Implementation of time-varying effects
+- Age stratification approach
+- One of the simplest extensions is a step function for β(t), i.e., different coeffcients over different time intervals.
+
+
+```{r, split}
+vet2 <- survSplit(Surv(time, status) ~ ., data= veteran, cut=c(90, 180), 
+                  episode= "tgroup", id="id")
+vet2[1:7, c("id", "tstart", "time", "status", "tgroup", "age", "karno")]
+vfit2 <- coxph(Surv(tstart, time, status) ~ trt + prior +
+                 karno:strata(tgroup), data=vet2)
+vfit2
+cox.zph(vfit2)
+# ADD THE NEW COEFFS to the plot 
+plot(zp[3], resid=FALSE)    # a plot for the 3rd variable in the fit
+abline(0,0, lty=3)
+# add the effect estimate for the age stratum 0-90
+abline(h= vfit2$coef[3], lwd=2, lty=1, col = 'green')
+# add the effect estimate for the age stratum 90-180
+abline(h= vfit2$coef[4], lwd=2, lty=1, col = 'blue')
+# add the effect estimate for the age stratum 180+
+abline(h= vfit2$coef[5], lwd=2, lty=1, col = 'red')
+```
+
+- This plot is showing the different HRs estimated for the different age strata. There is a strong negative coefficient for the time period 0-90, then a non-significant positive coefficient for 90-180 and subsequently a non-significant slight negative.
+- An alternate way to plot this is shown below, similar to the termplot function
+
+```{r, like-termplot}
+x <- 0:max(veteran$karno)
+y <- x * vfit2$coef[3]
+plot(x,y, ylim = c(-4,2), xlim = c(0,100), xlab = 'Karno', ylab = 'log HR')
+y2 <- x * vfit2$coef[4]
+points(x,y2, col = 'green')
+y3 <- x * vfit2$coef[5]
+points(x,y3, col = 'blue')
+```
+
+#### 4. Model Refinement
+- Non-linearity using a restricted cubic spline
+
+```{r, non-linear}
+# if the exposure of interest may be non-linear, 
+vfit2.11 <- coxph(Surv(time, status) ~ trt + prior + rcs(karno, df = 4), data=vet2)
+vfit2.11
+
+termplot(vfit, terms = 3, se = T, ylim = c(-5,2))
+termplot(vfit2.11, terms = 3, se = T, ylim = c(-5,2))
+```
+
+- Interaction term between time and non-linear effect estimate
+
+```{r, non-linear time varying}
+# if the exposure of interest may be non-linear, 
+vfit2.12 <- coxph(Surv(time, status) ~ trt + prior + rcs(karno, df = 4):strata(tgroup), data=vet2)
+vfit2.12
+
+# Create prediction data
+karno_seq <- seq(min(vet2$karno), max(vet2$karno), length.out = 100)
+pred_data <- data.frame(
+  karno = rep(karno_seq, 3),
+  tgroup = rep(1:3, each = 100),
+  trt = 0,  
+  prior = mean(vet2$prior),
+  tstart = rep(c(0, 90, 180), each = 100),
+  time = rep(c(90, 180, 411), each = 100)
+)
+
+# Get predictions
+preds <- predict(vfit2.12, newdata = pred_data, se.fit = TRUE)
+
+# Set up multi-panel plot
+par(mfrow = c(2,2))
+
+# Plot for each time group
+for(tg in 1:3) {
+  subset_data <- data.frame(
+    karno = karno_seq,
+    loghr = preds$fit[pred_data$tgroup == tg],
+    lower = preds$fit[pred_data$tgroup == tg] - 1.96 * preds$se.fit[pred_data$tgroup == tg],
+    upper = preds$fit[pred_data$tgroup == tg] + 1.96 * preds$se.fit[pred_data$tgroup == tg]
+  )
+  
+  plot(subset_data$karno, subset_data$loghr, type = "l",
+       ylim = c(-5, 2),  # matching your original scale
+       xlab = "Karnofsky Score",
+       ylab = "log(HR)",
+       main = paste("Time Period", tg, "\n", 
+                   ifelse(tg == 1, "0-90 days",
+                          ifelse(tg == 2, "90-180 days", ">180 days"))),
+       lwd = 2)
+  
+  # Add confidence intervals
+  lines(subset_data$karno, subset_data$lower, lty = 2)
+  lines(subset_data$karno, subset_data$upper, lty = 2)
+  
+  # Add reference line at log(HR) = 0
+  abline(h = 0, col = "gray", lty = 3)
+}
+
+# Add overall title in fourth panel
+plot.new()
+text(0.5, 0.5, "Non-linear effect of\nKarnofsky Score\nby time period", 
+     cex = 1.2, font = 2)
+
+
+```
+
+- non-linearity can also be estimated using ordinal factor variable based on quantiles
+
+## Results
+### Initial Model Assessment
+### Time-Varying Effects Analysis
+### Final Model and Interpretation
+
+## Discussion
+### Key Findings
+### Methodological Considerations
+### Implications for Environmental Epidemiology
+
+## References
