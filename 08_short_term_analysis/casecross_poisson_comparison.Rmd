@@ -1,0 +1,184 @@
+---
+title: "Comparing Case-Crossover and Poisson GLM Approaches"
+subtitle: "Analysis of Ozone Effects on Cardiovascular Disease Deaths"
+author: "Time Series Analysis Demonstration"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Introduction
+
+This document demonstrates how the same time series dataset can be analyzed using two different statistical approaches:
+
+1. **Case-Crossover Analysis** - A self-matched case-control design
+2. **Poisson GLM** - Generalized linear modeling for count data
+
+Both methods are commonly used in environmental epidemiology to study the short-term effects of air pollution on health outcomes.
+
+I have used codes from https://doi.org/10.32614/CRAN.package.season and conduct a similar experiment to 
+
+```
+Lu, Y., Symons, J.M., Geyh, A.S. and Zeger, S.L. (2008)
+‘An Approach to Checking Case-Crossover Analyses Based on Equivalence With Time-Series Methods’,
+Epidemiology, 19(2), pp. 169–175. Available at: https://doi.org/10.1097/EDE.0b013e3181632c24.
+```
+
+**NOTE**: this code uses aggregated count data, but case-crossover can be run with individual-level data, and that's actually the more common and natural format for case-crossover studies. 
+
+## Data Setup
+
+```{r load-libraries}
+# Load required libraries
+library(season)  # for casecross function
+library(splines) # for smooth functions in GLM
+library(knitr)   # for nice tables
+library(ggplot2) # for plotting
+library(lubridate)
+```
+
+```{r load-data}
+# Load cardiovascular disease data
+data(CVDdaily)
+
+# Subset data for example (through 1987)
+CVDdaily <- subset(CVDdaily, date <= as.Date('1987-12-31'))
+
+# Display basic information about the dataset
+cat("Dataset dimensions:", dim(CVDdaily), "\n")
+cat("Date range:", as.character(range(CVDdaily$date)), "\n")
+cat("Total CVD deaths:", sum(CVDdaily$cvd), "\n")
+```
+
+```{r explore-data}
+# Summary of key variables
+summary(CVDdaily[, c("cvd", "o3mean", "tmpd")])
+par(mfrow=c(3,1))
+with(CVDdaily, plot(date, cvd, type = 'l'))
+with(CVDdaily, plot(date, o3mean, type = 'l'))
+with(CVDdaily, plot(date, tmpd, type = 'l'))
+
+```
+
+## Case-Crossover Analysis
+
+Case-crossover is a variant of the case-control design where each case serves as its own control. This eliminates confounding by time-invariant factors.
+
+### Model 1: Case-Crossover with Day-of-Week Matching
+
+```{r casecross-model1}
+# NB casecross cannot handle  ns(tmpd, df = 3) directly so pre-created spline basis in the data setup 
+temp_spline <- ns(CVDdaily$tmpd, df = 3)
+colnames(temp_spline) <- paste0("temp_spline_", 1:3)
+CVDdaily <- cbind(CVDdaily, temp_spline)
+
+# Match on day of the week automatically
+model1 <- casecross(cvd ~ o3mean + temp_spline_1 + temp_spline_2 + temp_spline_3, 
+                    matchdow = TRUE, 
+                    data = CVDdaily)
+summary(model1)
+```
+
+**Interpretation:** The `matchdow=TRUE` option automatically matches cases and controls on the same day of the week.
+
+
+## Poisson GLM Analysis
+
+Now let's analyze the same data using Poisson regression, which is appropriate for count data like daily death counts.
+
+### Model 2: Poisson GLM with Temperature Spline
+
+```{r poisson-model1}
+n_year <- length(unique(year(CVDdaily$date)))
+df_to_use <- n_year * 7
+# Use smooth function for temperature instead of linear term
+poisson1 <- glm(cvd ~ o3mean + ns(tmpd, df = 3) + Mon + Tue + Wed + Thu + Fri + Sat + 
+                ns(date, df = df_to_use), 
+                data = CVDdaily, 
+                family = poisson())
+
+summary(poisson1)
+```
+
+## Comparison of Results
+
+Let's extract and compare the ozone effect estimates from all models:
+
+```{r comparison-table}
+# Extract ozone coefficients and standard errors
+summ1 <- data.frame(summary(model1))
+str(summ1)
+summ_poisson1 <- data.frame(summary(poisson1)$coefficients)
+str(summ_poisson1)
+
+results <- data.frame(
+  Model = c("Case-Cross 1", 
+            "Poisson 1" ),
+  Method = c("Case-Crossover OR",
+             "Poisson GLM RR"),
+  Ozone_Coeff = c(
+   summ1[row.names(summ1) == 'o3mean','coef'],
+
+   summ_poisson1[row.names(summ_poisson1) == 'o3mean','Estimate']
+  )
+  ,
+  SE = c(
+    summ1[row.names(summ1) == 'o3mean', 'se.coef.'],
+    
+    summ_poisson1[row.names(summ_poisson1) == 'o3mean', 'Std..Error']
+
+  )
+)
+# Calculate risk estimate and 95% confidence intervals
+results$Ozone_Risk <- exp(results$Ozone_Coeff)
+results$Lower_CI <- exp(results$Ozone_Coeff - 1.96 * results$SE)
+results$Upper_CI <- exp(results$Ozone_Coeff + 1.96 * results$SE)
+
+
+kable(results, digits = 4, caption = "Comparison of Ozone Effect Estimates")
+```
+
+## Key Differences Between Methods
+
+### Case-Crossover Design
+- **Strengths:**
+  - Automatically controls for time-invariant confounders
+  - No need to model long-term trends explicitly
+  - Robust to model misspecification for time trends
+
+- **Limitations:**
+  - Can be less efficient than GLM approaches
+  - Matching strategy affects results
+  - May have limited power with sparse data
+
+### Poisson GLM
+- **Strengths:**
+  - More flexible modeling of relationships
+  - Can incorporate smooth functions for confounders
+  - Generally more efficient use of data
+
+- **Limitations:**
+  - Requires careful modeling of time trends and seasonality
+  - More susceptible to confounding if trends not properly modeled
+  - Model specification choices can significantly affect results
+
+## Conclusions
+
+Both case-crossover and Poisson GLM approaches can be used to analyze the same time series data, but they make different assumptions and have different strengths:
+
+1. **Similar Results:** When properly specified, both methods generally yield similar effect estimates for the exposure of interest (ozone in this case).
+
+2. **Different Approaches to Confounding:** Case-crossover automatically handles time-invariant confounding through matching, while Poisson GLM requires explicit modeling of potential confounders.
+
+3. **Flexibility vs. Robustness:** Poisson GLM offers more flexibility in modeling relationships, while case-crossover provides more robustness to certain types of model misspecification.
+
+The choice between methods often depends on the specific research question, data characteristics, and the investigator's comfort with different modeling assumptions.
+m

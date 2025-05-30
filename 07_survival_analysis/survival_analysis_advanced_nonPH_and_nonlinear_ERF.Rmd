@@ -109,9 +109,33 @@ termplot(vfit2.11, terms = 3, se = T, ylim = c(-5,2))
 - Interaction term between time and non-linear effect estimate
 
 ```{r, non-linear time varying}
+library(ggplot2)
 # if the exposure of interest may be non-linear, 
-vfit2.12 <- coxph(Surv(time, status) ~ trt + prior + rcs(karno, df = 4):strata(tgroup), data=vet2)
-vfit2.12
+vfit2.12 <- cph(Surv(time, status) ~ trt + prior + rcs(karno, df = 3) + strat(tgroup), data=vet2)
+dd <- datadist(vet2)
+options(datadist = 'dd')
+par(mfrow = c(2,2))
+p <- Predict(vfit2.12,  karno, tgroup = 1)
+ggplot(p)
+p <- Predict(vfit2.12,  karno, tgroup = 2)
+ggplot(p)
+p <- Predict(vfit2.12,  karno, tgroup = 3)
+ggplot(p)
+
+
+# trt = seq(min(vet2$trt), max(vet2$trt), length.out=1),
+             # prior =  seq(min(vet2$prior), max(vet2$prior), length.out=2),
+             # karno = seq(min(vet2$karno), max(vet2$karno), length.out=10),
+             # tgroup=1
+             # )
+
+# p2 <- data.frame(p)
+# with(p2, plot(karno, yhat))
+
+```
+
+```{r, non-linear with manual df}
+vfit2.12 <- coxph(Surv(time, status) ~ trt + prior + rcs(karno, df = 5):strata(tgroup), data=vet2)
 
 # Create prediction data
 karno_seq <- seq(min(vet2$karno), max(vet2$karno), length.out = 100)
@@ -166,6 +190,130 @@ text(0.5, 0.5, "Non-linear effect of\nKarnofsky Score\nby time period",
 
 - non-linearity can also be estimated using ordinal factor variable based on quantiles
 
+```{r as function}
+# Function to create prediction data and plot for a stratified model with splines
+plot_stratified_spline_effect <- function(
+  model,              # Fitted coxph model
+  data,               # Original dataset
+  spline_var,         # Name of the spline variable (e.g., "karno")
+  strata_var,         # Name of the stratification variable (e.g., "tgroup")
+  other_vars = NULL,  # List of other variables in model and their reference values
+  n_points = 100,     # Number of points for prediction
+  ylim = c(-5, 2),    # Y-axis limits
+  plot_title = "Non-linear effect across strata",
+  strata_labels = NULL # Optional custom labels for strata
+) {
+  # Extract variable from string name
+  spline_var_values <- data[[spline_var]]
+  strata_var_values <- data[[strata_var]]
+  
+  # Get strata levels
+  strata_levels <- sort(unique(strata_var_values))
+  n_strata <- length(strata_levels)
+  
+  # Create sequence for spline variable
+  var_seq <- seq(min(spline_var_values, na.rm = TRUE), 
+                max(spline_var_values, na.rm = TRUE), 
+                length.out = n_points)
+  
+  # Set up reference values for other variables
+  ref_values <- list()
+  if (!is.null(other_vars)) {
+    for (var_name in names(other_vars)) {
+      if (is.null(other_vars[[var_name]])) {
+        # Use mean or most common value if not specified
+        if (is.numeric(data[[var_name]])) {
+          ref_values[[var_name]] <- mean(data[[var_name]], na.rm = TRUE)
+        } else {
+          tab <- table(data[[var_name]])
+          ref_values[[var_name]] <- names(tab)[which.max(tab)]
+        }
+      } else {
+        ref_values[[var_name]] <- other_vars[[var_name]]
+      }
+    }
+  }
+  
+  # Create prediction data frame
+  pred_data <- data.frame(
+    matrix(nrow = n_points * n_strata, ncol = length(ref_values) + 2)
+  )
+  
+  # Set column names
+  colnames(pred_data) <- c(spline_var, strata_var, names(ref_values))
+  
+  # Fill prediction data
+  pred_data[[spline_var]] <- rep(var_seq, n_strata)
+  pred_data[[strata_var]] <- rep(strata_levels, each = n_points)
+  
+  # Add reference values for other variables
+  for (var_name in names(ref_values)) {
+    pred_data[[var_name]] <- rep(ref_values[[var_name]], n_points * n_strata)
+  }
+  
+  # Get predictions
+  preds <- predict(model, newdata = pred_data, se.fit = TRUE)
+  
+  # Create plots
+  if (is.null(strata_labels)) {
+    strata_labels <- paste("Stratum", strata_levels)
+  }
+  
+  # Set up multi-panel plot
+  panel_rows <- ceiling(sqrt(n_strata + 1))
+  panel_cols <- ceiling((n_strata + 1) / panel_rows)
+  par(mfrow = c(panel_rows, panel_cols))
+  
+  # Plot for each stratum
+  for (i in 1:n_strata) {
+    idx <- pred_data[[strata_var]] == strata_levels[i]
+    subset_data <- data.frame(
+      x = var_seq,
+      y = preds$fit[idx],
+      lower = preds$fit[idx] - 1.96 * preds$se.fit[idx],
+      upper = preds$fit[idx] + 1.96 * preds$se.fit[idx]
+    )
+    
+    plot(subset_data$x, subset_data$y, type = "l",
+         ylim = ylim,
+         xlab = spline_var,
+         ylab = "log(HR)",
+         main = strata_labels[i],
+         lwd = 2)
+    
+    # Add confidence intervals
+    lines(subset_data$x, subset_data$lower, lty = 2)
+    lines(subset_data$x, subset_data$upper, lty = 2)
+    
+    # Add reference line at log(HR) = 0
+    abline(h = 0, col = "gray", lty = 3)
+  }
+  
+  # Add overall title in last panel
+  plot.new()
+  text(0.5, 0.5, plot_title, cex = 1.2, font = 2)
+  
+  # Return the prediction data for further use if needed
+  invisible(list(
+    pred_data = pred_data,
+    predictions = preds
+  ))
+}
+
+plot_stratified_spline_effect(
+  model = vfit2.12,
+  data = vet2,
+  spline_var = "karno",
+  strata_var = "tgroup",
+  other_vars = list(
+    trt = 0,
+    prior = NULL  # This will use mean value automatically
+  ),
+  ylim = c(-5, 2),
+  strata_labels = c("0-90 days", "90-180 days", ">180 days"),
+  plot_title = "Non-linear effect of\nKarnofsky Score\nby time period"
+)
+```
 ## Results
 ### Initial Model Assessment
 ### Time-Varying Effects Analysis
